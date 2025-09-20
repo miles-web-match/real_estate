@@ -46,13 +46,13 @@ const stripWords = (s: string, words: string[]) =>
   s.replace(new RegExp(`(${words.map(esc).join("|")})`, "g"), "");
 
 /* ---------- 規約ベースの禁止/緩和ルール ---------- */
-/** 強い優良誤認や最上級は削除。静寂/利便性などは“柔らかく言い換え”。 */
+// 強い優良誤認や最上級は削除。静寂/利便性などは“柔らかく言い換え”。
 const BANNED_HARD = [
   "完全","完ぺき","絶対","万全","100％","理想","日本一","日本初","業界一","No.1","一流","最高","最高級","最上級","極上",
   "地域でナンバーワン","抜群","特選","厳選","正統","至近","至便","特安","激安","掘出","破格","投売り","バーゲンセール",
 ];
 
-/** “言い切り”を避ける緩和マップ（断定→配慮/傾向） */
+// “言い切り”を避ける緩和マップ（断定→配慮/傾向）
 const SOFT_MAP: Array<[RegExp, string]> = [
   // 環境・快適性
   [/日当たり(良好|抜群)/g, "日当たりに配慮"],
@@ -108,26 +108,30 @@ function enforceKiyaku(text: string) {
   return out.replace(/\s{2,}/g, " ").trim();
 }
 
-/* ---------- トーン/スタイル ---------- */
+/* ---------- トーン/スタイル（ベース） ---------- */
 function styleGuide(tone: string): string {
   if (tone === "親しみやすい") {
     return [
-      "文体: 親しみやすく、やわらかい丁寧語。誇張・感嘆は抑制。",
-      "構成: ①立地・雰囲気 ②敷地/外観 ③アクセス ④共用/サービス ⑤暮らしの情景。",
-      "文長: 30〜60字中心。文末は「です」「ます」。"
+      "文体: やわらかい丁寧語。親近感を大切にし、専門用語は避ける。",
+      "構成: 読みやすい短めの段落で、暮らしの具体を想像できる表現。",
+      "文長: 30〜60字中心。文末は「です」「ます」を基本。",
+      "禁止: 子どもっぽい接続（〜で、〜だから〜です）。過度な誇張。"
     ].join("\n");
   }
   if (tone === "一般的") {
     return [
-      "文体: 中立・説明的。事実ベースで誇張を避ける。",
-      "構成: ①概要 ②規模/デザイン ③アクセス ④共用/管理 ⑤まとめ。",
-      "文長: 40〜70字中心。文末は「です」「ます」。"
+      "文体: 中立・説明的。事実ベースで過不足なく、読みやすさ重視。",
+      "構成: 概要→立地/アクセス→建物/管理→共用→まとめ（順序は目安）。",
+      "文長: 40〜70字中心。文末は「です」「ます」を基本。",
+      "禁止: 子どもっぽい接続（〜で、〜だから〜です）。曖昧な断定。"
     ].join("\n");
   }
+  // 上品・落ち着いた
   return [
-    "文体: 上品・落ち着いた。過度な誇張や断定は避ける。",
-    "構成: ①コンセプト/立地 ②ランドスケープ ③建築/保存 ④交通 ⑤共用/サービス ⑥結び。",
-    "文長: 40〜70字中心。体言止めは1〜2文まで。文末は「です」「ます」。"
+    "文体: 上品・端正・落ち着いた調子。余白と品位を感じる表現。",
+    "構成: 流れの強制は不要だが、段落ごとに焦点を置いて整理。",
+    "文長: 40〜70字中心。体言止めは1〜2文まで許容。",
+    "禁止: 子どもっぽい接続（〜で、〜だから〜です）。誇張的最上級。"
   ].join("\n");
 }
 
@@ -142,7 +146,7 @@ async function openaiChat(apiKey: string, payload: any): Promise<any> {
   return r.json();
 }
 
-/* ---------- 長さ矯正 / 校正 / 美文 ---------- */
+/* ---------- 長さ矯正 / 校正 / 最終整形 ---------- */
 async function ensureLengthDescribe(
   apiKey: string,
   opts: { draft: string; context: string; min: number; max: number; tone: string; style: string }
@@ -172,7 +176,7 @@ async function ensureLengthDescribe(
       out = String(JSON.parse(r.choices?.[0]?.message?.content || "{}")?.text || out);
     } catch {}
     out = stripPriceAndSpaces(out);
-    out = enforceKiyaku(out); // 規約準拠・緩和
+    out = enforceKiyaku(out);
     if (countJa(out) > opts.max) out = hardCapJa(out, opts.max);
   }
   return out;
@@ -188,7 +192,8 @@ async function polishJapanese(apiKey: string, text: string, tone: string, style:
         role: "system",
         content:
           'Return ONLY {"text": string}. (json)\n' +
-          `以下の日本語を校正。文末は「です」「ます」。体言止めは最大2文。トーン:${tone}\n${style}`,
+          `以下の日本語を校正。幼稚な接続（「〜で、〜だから〜です」）は避ける。トーン:${tone}\n${style}\n` +
+          "文末は原則「です」「ます」だが、必要に応じて体言止めや「〜を実現」「〜を提供します」も許容。",
       },
       { role: "user", content: JSON.stringify({ current_text: text }) },
     ],
@@ -200,21 +205,44 @@ async function polishJapanese(apiKey: string, text: string, tone: string, style:
   }
 }
 
-/** 最終「美文」ステップ：自然で美しいが“誇張はしない” */
-async function beautifyElegant(apiKey: string, text: string, tone: string) {
+/** 最終整形（トーン別） */
+async function beautifyByTone(apiKey: string, text: string, tone: string) {
+  let systemPrompt = '';
+  if (tone.includes("上品")) {
+    // 高級コピー調
+    systemPrompt =
+      'Return ONLY {"text": string}. (json)\n' +
+      "目標: 高級不動産広告コピーのように、自然で美しい日本語へ整える。\n" +
+      "文体: 上品・端正・落ち着いた調子。読み手に安心感と格式を与える。\n" +
+      "文末: 原則「です」「ます」。体言止めや「〜を実現」「〜を提供します」も許容。\n" +
+      "禁止: 幼稚な接続（例:「〜で、〜だから〜です」）。誇張的な最上級・曖昧な断定は禁止。\n" +
+      "語彙例: 「〜という全体コンセプトのもと」「〜に相応しい」「〜を実現」「〜を提供します」「〜が広がります」。";
+  } else if (tone.includes("一般")) {
+    // 中価格帯の中立・説明調
+    systemPrompt =
+      'Return ONLY {"text": string}. (json)\n' +
+      "目標: 中立・説明的で読みやすい文章。過不足なく要点を整理。\n" +
+      "文体: 平易で癖のない丁寧語。箇条書き的でなく、自然な段落構成。\n" +
+      "文末: 原則「です」「ます」。体言止めは多用しない。\n" +
+      "禁止: 幼稚な接続（「〜で、〜だから〜です」）。誇張・断定は避ける。\n" +
+      "指針: 数字・固有名詞・設備などの事実を適度に織り交ぜ、読み手の判断材料を明確にする。";
+  } else {
+    // 親しみやすい：やわらかくフレンドリー
+    systemPrompt =
+      'Return ONLY {"text": string}. (json)\n' +
+      "目標: やわらかく親しみやすい文章。暮らしのイメージが湧くように。\n" +
+      "文体: 丁寧語だが砕けすぎない。難語は避け、具体が伝わる表現。\n" +
+      "文末: 基本「です」「ます」。体言止めは控えめに。\n" +
+      "禁止: 幼稚な接続（「〜で、〜だから〜です」）や過度な誇張。\n" +
+      "指針: 生活シーン（朝・帰宅・休日）のイメージを一つ入れるとよい。";
+  }
+
   const r = await openaiChat(apiKey, {
     model: "gpt-4o-mini",
-    temperature: 0.2,
+    temperature: 0.3,
     response_format: { type: "json_object" },
     messages: [
-      {
-        role: "system",
-        content:
-          'Return ONLY {"text": string}. (json)\n' +
-          "目標: 文章を自然で美しい日本語へ整える。上品・端正・読みやすさ重視。\n" +
-          "禁止: 事実の創作・最上級・断定的効能・価格/金額・電話・URL。\n" +
-          "指針: 過度な形容は避け、情報の順序と論理を整え、余計な重複を削る。",
-      },
+      { role: "system", content: systemPrompt },
       { role: "user", content: JSON.stringify({ current_text: text, tone }) },
     ],
   });
@@ -287,6 +315,7 @@ export const onRequestPost: PagesFunction = async (ctx) => {
         "事実ベース。価格/金額/円/万円・電話番号・外部URLは禁止。",
         "ビル名（name）は2回程度自然に含める。過度な連呼は禁止。",
         "誇張・最上級・比較優位の断定は禁止。状況依存の表現は“配慮/傾向”に言い換える。",
+        "幼稚な接続（「〜で、〜だから〜です」）は避ける。",
       ].join("\n");
 
     const payload = {
@@ -351,7 +380,7 @@ export const onRequestPost: PagesFunction = async (ctx) => {
       text = enforceKiyaku(text);
     }
 
-    // ④ 長さ矯正 → ⑤ 日本語校正 → ⑥ 美文化
+    // ④ 長さ矯正 → ⑤ 日本語校正 → ⑥ トーン別最終整形
     text = await ensureLengthDescribe(OPENAI_API_KEY, {
       draft: text,
       context: extracted_text,
@@ -366,7 +395,7 @@ export const onRequestPost: PagesFunction = async (ctx) => {
       tone,
       STYLE_GUIDE + (STYLE_ANCHORS ? `\n${STYLE_ANCHORS}` : "")
     );
-    text = await beautifyElegant(OPENAI_API_KEY, text, tone);
+    text = await beautifyByTone(OPENAI_API_KEY, text, tone);
 
     // 仕上げ（安全側）
     if (countJa(text) > maxChars) text = hardCapJa(text, maxChars);

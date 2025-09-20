@@ -81,6 +81,22 @@ function widenWalkingMinutes(text: string) {
   });
 }
 
+/** “間取りを言わない”ためのマスク（各トーンで適用） */
+function stripFloorPlan(text: string) {
+  // 代表的な間取り・間型・略号を包括的に除去
+  const fp = [
+    "ワンルーム","ワン ルーム","スタジオタイプ","スタジオ タイプ","メゾネット","ロフト",
+    "間取り","間取","間口",
+    "LDK","SLDK","SDK","LK","DK","K",
+    "1LDK","2LDK","3LDK","4LDK","5LDK","1DK","2DK","3DK","4DK","1K","2K","3K","4K",
+    "１ＬＤＫ","２ＬＤＫ","３ＬＤＫ","４ＬＤＫ","１ＤＫ","２ＤＫ","３ＤＫ","４ＤＫ","１Ｋ","２Ｋ","３Ｋ","４Ｋ",
+    // 数字 + LDK/DK/K（半角/全角）
+    "\\d\\s*(LDK|DK|K)","[０-９]\\s*(ＬＤＫ|ＤＫ|Ｋ)"
+  ];
+  const re = new RegExp(fp.join("|"), "gi");
+  return text.replace(re, "");
+}
+
 /** フレーズ緩和 */
 function softenPhrases(text: string) {
   let out = text;
@@ -88,7 +104,7 @@ function softenPhrases(text: string) {
   return out;
 }
 
-/** 規約準拠クリーニング（柔らかい言い換え重視） */
+/** 規約準拠クリーニング（柔らかい言い換え重視 + 間取り禁止 + 徒歩幅） */
 function enforceKiyaku(text: string) {
   let out = text;
 
@@ -97,6 +113,9 @@ function enforceKiyaku(text: string) {
 
   // “新築”断定は避ける（建築年等の事実が無い限り）
   out = out.replace(/新築/g, "");
+
+  // 間取りは言わない
+  out = stripFloorPlan(out);
 
   // 徒歩表現は「幅を持たせる」
   out = widenWalkingMinutes(out);
@@ -113,25 +132,22 @@ function styleGuide(tone: string): string {
   if (tone === "親しみやすい") {
     return [
       "文体: やわらかい丁寧語。親近感を大切にし、専門用語は避ける。",
-      "構成: 読みやすい短めの段落で、暮らしの具体を想像できる表現。",
       "文長: 30〜60字中心。文末は「です」「ます」を基本。",
-      "禁止: 子どもっぽい接続（〜で、〜だから〜です）。過度な誇張。"
+      "禁止: 子どもっぽい接続（〜で、〜だから〜です）。過度な誇張。",
     ].join("\n");
   }
   if (tone === "一般的") {
     return [
       "文体: 中立・説明的。事実ベースで過不足なく、読みやすさ重視。",
-      "構成: 概要→立地/アクセス→建物/管理→共用→まとめ（順序は目安）。",
       "文長: 40〜70字中心。文末は「です」「ます」を基本。",
-      "禁止: 子どもっぽい接続（〜で、〜だから〜です）。曖昧な断定。"
+      "禁止: 子どもっぽい接続（〜で、〜だから〜です）。曖昧な断定。",
     ].join("\n");
   }
-  // 上品・落ち着いた
+  // 上品・落ち着いた（高級コピー調の土台）
   return [
     "文体: 上品・端正・落ち着いた調子。余白と品位を感じる表現。",
-    "構成: 流れの強制は不要だが、段落ごとに焦点を置いて整理。",
     "文長: 40〜70字中心。体言止めは1〜2文まで許容。",
-    "禁止: 子どもっぽい接続（〜で、〜だから〜です）。誇張的最上級。"
+    "禁止: 子どもっぽい接続（〜で、〜だから〜です）。誇張的最上級。",
   ].join("\n");
 }
 
@@ -253,6 +269,44 @@ async function beautifyByTone(apiKey: string, text: string, tone: string) {
   }
 }
 
+/** 修正要望（任意）を反映 */
+async function applyRevisionNotes(apiKey: string, text: string, notes: string[] | string, tone: string, style: string) {
+  const list = Array.isArray(notes) ? notes.filter(Boolean) : String(notes || "").split(/\n+/).map(s=>s.trim()).filter(Boolean);
+  if (!list.length) return text;
+
+  const r = await openaiChat(apiKey, {
+    model: "gpt-4o-mini",
+    temperature: 0.2,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content:
+          'Return ONLY {"text": string}. (json)\n' +
+          "与えられた本文に修正要望を反映。誇張や最上級は避け、規約に配慮。間取りは言わない。幼稚な接続は避ける。",
+      },
+      {
+        role: "user",
+        content: JSON.stringify({
+          current_text: text,
+          revision_notes: list,
+          tone,
+          style,
+          constraints: {
+            no_floor_plan: true,
+            avoid_exaggeration: true,
+          },
+        }),
+      },
+    ],
+  });
+  try {
+    return JSON.parse(r.choices?.[0]?.message?.content || "{}")?.text || text;
+  } catch {
+    return text;
+  }
+}
+
 /* ---------- Handler ---------- */
 export const onRequestPost: PagesFunction = async (ctx) => {
   try {
@@ -269,6 +323,7 @@ export const onRequestPost: PagesFunction = async (ctx) => {
       minChars = 450,
       maxChars = 550,
       referenceExamples = [] as string[],
+      revisionNotes = [] as string[] | string, // ★ 追加：修正要望
     } = body || {};
 
     if (!name || !url)
@@ -303,7 +358,7 @@ export const onRequestPost: PagesFunction = async (ctx) => {
       } catch {}
     }
 
-    // ① 初稿
+    /* ---------- ① 初回生成（draft） ---------- */
     const system =
       'Return ONLY {"text": string}. (json)\n' +
       [
@@ -316,6 +371,7 @@ export const onRequestPost: PagesFunction = async (ctx) => {
         "ビル名（name）は2回程度自然に含める。過度な連呼は禁止。",
         "誇張・最上級・比較優位の断定は禁止。状況依存の表現は“配慮/傾向”に言い換える。",
         "幼稚な接続（「〜で、〜だから〜です」）は避ける。",
+        "間取り（例: 1LDK/2DK/1K/ワンルーム 等）は触れない。",
       ].join("\n");
 
     const payload = {
@@ -339,70 +395,49 @@ export const onRequestPost: PagesFunction = async (ctx) => {
       response_format: { type: "json_object" },
       messages: [{ role: "system", content: system }, { role: "user", content: JSON.stringify(payload) }],
     });
-    let text = "";
+
+    let draft = "";
     try {
-      text = String(JSON.parse(r1.choices?.[0]?.message?.content || "{}")?.text || "");
+      draft = String(JSON.parse(r1.choices?.[0]?.message?.content || "{}")?.text || "");
     } catch {}
 
-    // ② 規約準拠クリーニング（柔らかい言い換え重視）
-    text = stripPriceAndSpaces(text);
-    text = enforceKiyaku(text);
+    draft = stripPriceAndSpaces(draft);
+    draft = enforceKiyaku(draft);
 
-    // ③ 例文に合わせた微調整（任意）
-    if (referenceExamples.length > 0) {
-      const review = await openaiChat(OPENAI_API_KEY, {
-        model: "gpt-4o-mini",
-        temperature: 0,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content:
-              'Return ONLY {"score": number, "rewrite": string}. 日本語。適合度1〜5点。4未満ならrewriteで上書き。',
-          },
-          {
-            role: "user",
-            content: JSON.stringify({
-              current_text: text,
-              examples: referenceExamples.slice(0, 5),
-              tone,
-              style_guide: STYLE_GUIDE,
-              anchors: STYLE_ANCHORS,
-              range: { min: minChars, max: maxChars },
-            }),
-          },
-        ],
-      });
-      try {
-        const j = JSON.parse(review.choices?.[0]?.message?.content || "{}");
-        if (typeof j.score === "number" && j.score < 4 && j.rewrite) text = String(j.rewrite);
-      } catch {}
-      text = enforceKiyaku(text);
-    }
-
-    // ④ 長さ矯正 → ⑤ 日本語校正 → ⑥ トーン別最終整形
-    text = await ensureLengthDescribe(OPENAI_API_KEY, {
-      draft: text,
+    /* ---------- ② 自動校正チェック（checked） ---------- */
+    let checked = await ensureLengthDescribe(OPENAI_API_KEY, {
+      draft,
       context: extracted_text,
       min: minChars,
       max: maxChars,
       tone,
       style: STYLE_GUIDE + (STYLE_ANCHORS ? `\n${STYLE_ANCHORS}` : ""),
     });
-    text = await polishJapanese(
+    checked = await polishJapanese(
       OPENAI_API_KEY,
-      text,
+      checked,
       tone,
       STYLE_GUIDE + (STYLE_ANCHORS ? `\n${STYLE_ANCHORS}` : "")
     );
-    text = await beautifyByTone(OPENAI_API_KEY, text, tone);
+    checked = await beautifyByTone(OPENAI_API_KEY, checked, tone);
+    checked = stripPriceAndSpaces(checked);
+    checked = enforceKiyaku(checked);
 
-    // 仕上げ（安全側）
-    if (countJa(text) > maxChars) text = hardCapJa(text, maxChars);
-    text = stripPriceAndSpaces(text);
-    text = enforceKiyaku(text);
+    /* ---------- ③ 修正要望の反映（final） ---------- */
+    let finalText = await applyRevisionNotes(OPENAI_API_KEY, checked, revisionNotes, tone, STYLE_GUIDE);
+    finalText = stripPriceAndSpaces(finalText);
+    finalText = enforceKiyaku(finalText);
+    if (countJa(finalText) > maxChars) finalText = hardCapJa(finalText, maxChars);
 
-    return new Response(JSON.stringify({ text }), {
+    // 後方互換: text は最終版
+    const result = {
+      text: finalText,
+      draft,     // 初回生成
+      checked,   // 自動校正チェック後
+      final: finalText, // 修正要望反映後
+    };
+
+    return new Response(JSON.stringify(result), {
       headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
     });
   } catch (e: any) {

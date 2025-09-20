@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>マンション説明文作成 – of-tagline</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .shadow-soft{box-shadow:0 10px 25px rgba(0,0,0,.06)}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  </style>
+</head>
+<body class="bg-zinc-50 text-zinc-800">
+  <header class="bg-white border-b sticky top-0 z-20">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <h1 class="text-xl font-semibold">マンション説明文作成</h1>
+      <a href="/" class="text-sm text-zinc-500 hover:text-zinc-700">/api/describe を使用</a>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- 左：フォーム -->
+    <section class="bg-white rounded-2xl shadow-soft p-5">
+      <h2 class="text-lg font-medium mb-4">入力</h2>
+
+      <label class="block text-sm mb-1">物件名</label>
+      <input id="name" class="w-full border rounded-xl px-3 py-2 mb-4" placeholder="例）パークタワー晴海" />
+
+      <label class="block text-sm mb-1">物件URL</label>
+      <input id="url" class="w-full border rounded-xl px-3 py-2 mb-4" placeholder="https://..." />
+
+      <label class="block text-sm mb-1">マストワード（空白/改行/読点で区切り）</label>
+      <textarea id="mustWords" rows="2" class="w-full border rounded-xl px-3 py-2 mb-4" placeholder="駅徒歩3分 ラウンジ ペット可 角部屋 など"></textarea>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm mb-1">トーン</label>
+          <select id="tone" class="w-full border rounded-xl px-3 py-2">
+            <option selected>上品・落ち着いた</option>
+            <option>一般的</option>
+            <option>親しみやすい</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm mb-1">最小文字数（全角）</label>
+            <input id="minChars" type="number" value="450" class="w-full border rounded-xl px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-sm mb-1">最大文字数（全角）</label>
+            <input id="maxChars" type="number" value="550" class="w-full border rounded-xl px-3 py-2" />
+          </div>
+        </div>
+      </div>
+
+      <label class="block text-sm mt-4 mb-1">スタイル参照（良い例・1行=1例、最大5）</label>
+      <textarea id="referenceExamples" rows="5" class="w-full border rounded-xl px-3 py-2 mb-4" placeholder="（良い例の本文をここに貼付）"></textarea>
+
+      <div class="flex items-center gap-3">
+        <button id="run" class="bg-black text-white rounded-xl px-4 py-2 hover:bg-zinc-800">文章を生成</button>
+        <button id="reset" class="border rounded-xl px-4 py-2 hover:bg-zinc-100">リセット</button>
+        <span id="status" class="text-sm text-zinc-500"></span>
+      </div>
+      <p class="text-xs text-zinc-500 mt-3">
+        規約に抵触しやすい表現は自動的に緩和・除去されます（比較最上級・価格誤認・「新築」断定・徒歩◯分 など）。
+      </p>
+    </section>
+
+    <!-- 右：結果 -->
+    <section class="space-y-6">
+      <div class="bg-white rounded-2xl shadow-soft p-5">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-lg font-medium">出力① 初回生成</h3>
+          <button data-copy="#out1" class="text-sm px-3 py-1 rounded-lg border hover:bg-zinc-50">コピー</button>
+        </div>
+        <pre id="out1" class="whitespace-pre-wrap mono text-sm bg-zinc-50 border rounded-xl p-3 min-h-[120px]"></pre>
+        <div class="text-right text-xs text-zinc-500 mt-1">長さ：<span id="len1">0</span> 文字</div>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow-soft p-5">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-lg font-medium">出力② チェック結果</h3>
+          <button data-copy="#out2" class="text-sm px-3 py-1 rounded-lg border hover:bg-zinc-50">コピー</button>
+        </div>
+        <pre id="out2" class="whitespace-pre-wrap mono text-sm bg-zinc-50 border rounded-xl p-3 min-h-[120px]">— 自動チェック待ち／未実行 —</pre>
+        <div class="text-right text-xs text-zinc-500 mt-1">長さ：<span id="len2">0</span> 文字</div>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow-soft p-5">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-lg font-medium">出力③ 要望反映後</h3>
+          <button data-copy="#out3" class="text-sm px-3 py-1 rounded-lg border hover:bg-zinc-50">コピー</button>
+        </div>
+        <pre id="out3" class="whitespace-pre-wrap mono text-sm bg-zinc-50 border rounded-xl p-3 min-h-[120px]">— まだ要望未反映 —</pre>
+        <div class="text-right text-xs text-zinc-500 mt-1">長さ：<span id="len3">0</span> 文字</div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="text-center text-xs text-zinc-500 py-6">
+    © of-tagline
+  </footer>
+
+  <script>
+    const $ = (q)=>document.querySelector(q);
+    const $$ = (q)=>document.querySelectorAll(q);
+
+    async function postDescribe() {
+      $("#status").textContent = "生成中…";
+      $("#out1").textContent = "";
+      $("#out2").textContent = "— 自動チェック待ち／未実行 —";
+      $("#out3").textContent = "— まだ要望未反映 —";
+      $("#len1").textContent = "0";
+      $("#len2").textContent = "0";
+      $("#len3").textContent = "0";
+
+      const name = $("#name").value.trim();
+      const url = $("#url").value.trim();
+      if (!name || !url) {
+        alert("物件名と物件URLは必須です");
+        $("#status").textContent = "";
+        return;
+      }
+      const mustWords = $("#mustWords").value.split(/[,、\s\n/]+/).map(s=>s.trim()).filter(Boolean);
+      const tone = $("#tone").value.trim();
+      const minChars = parseInt($("#minChars").value || "450", 10);
+      const maxChars = parseInt($("#maxChars").value || "550", 10);
+      const referenceExamples = $("#referenceExamples").value.split(/\n+/).map(s=>s.trim()).filter(Boolean).slice(0,5);
+
+      try {
+        const res = await fetch("/api/describe", {
+          method: "POST",
+          headers: {"content-type":"application/json"},
+          body: JSON.stringify({ name, url, mustWords, tone, minChars, maxChars, referenceExamples })
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error || ("HTTP "+res.status));
+
+        const text = json.text || JSON.stringify(json, null, 2);
+        $("#out1").textContent = text;
+        $("#len1").textContent = [...text].length;
+
+        // ここでは自動チェックと要望反映はサーバー側で済んでいる想定なので、
+        // 同じ内容を②③にも反映（必要なら別APIに差し替え可能）
+        $("#out2").textContent = text;
+        $("#len2").textContent = [...text].length;
+        $("#out3").textContent = text;
+        $("#len3").textContent = [...text].length;
+
+        $("#status").textContent = "完了";
+      } catch (e) {
+        $("#status").textContent = "エラー";
+        $("#out1").textContent = "Error: " + (e && e.message ? e.message : e);
+      }
+    }
+
+    $("#run").addEventListener("click", postDescribe);
+    $("#reset").addEventListener("click", ()=>{
+      $("#name").value="";
+      $("#url").value="";
+      $("#mustWords").value="";
+      $("#referenceExamples").value="";
+      $("#out1").textContent="";
+      $("#out2").textContent="— 自動チェック待ち／未実行 —";
+      $("#out3").textContent="— まだ要望未反映 —";
+      $("#len1").textContent="0";
+      $("#len2").textContent="0";
+      $("#len3").textContent="0";
+      $("#status").textContent="";
+    });
+    $("[data-copy='#out1']").addEventListener("click", ()=>navigator.clipboard.writeText($("#out1").textContent||""));
+    $("[data-copy='#out2']").addEventListener("click", ()=>navigator.clipboard.writeText($("#out2").textContent||""));
+    $("[data-copy='#out3']").addEventListener("click", ()=>navigator.clipboard.writeText($("#out3").textContent||""));
+  </script>
+</body>
+</html>

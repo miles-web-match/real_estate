@@ -12,7 +12,7 @@ export const onRequestOptions: PagesFunction = async () =>
     },
   });
 
-/* ====== Utils（describe.ts と同じ） ====== */
+/* ====== Utils（describe.ts と同一） ====== */
 const countJa = (s: string) => Array.from(s || "").length;
 function hardCapJa(s: string, max: number) {
   const arr = Array.from(s || ""); if (arr.length <= max) return s;
@@ -46,8 +46,9 @@ function stripFloorPlan(text: string){
   const fp = ["ワンルーム","ワン ルーム","スタジオタイプ","スタジオ タイプ","メゾネット","ロフト","間取り","間取","間口","LDK","SLDK","SDK","LK","DK","K","1LDK","2LDK","3LDK","4LDK","5LDK","1DK","2DK","3DK","4DK","1K","2K","3K","4K","１ＬＤＫ","２ＬＤＫ","３ＬＤＫ","４ＬＤＫ","１ＤＫ","２ＤＫ","３ＤＫ","４ＤＫ","１Ｋ","２Ｋ","３Ｋ","４Ｋ","\\d\\s*(LDK|DK|K)","[０-９]\\s*(ＬＤＫ|ＤＫ|Ｋ)"];
   return text.replace(new RegExp(fp.join("|"),"gi"),"");
 }
+/** 1室向け情報の除去（describe.ts と同一 + 追加パッチ込み） */
 function stripUnitSpecific(text: string) {
-  const patterns = [
+  const patterns: RegExp[] = [
     /\b\d{1,4}\s*号室\b/g,
     /(所在|当該)?\s*([地上\d]+)階部分/g,
     /(方位|方角|向き)\s*[:：]?\s*(南|東|西|北|南東|南西|北東|北西|東南|西南|東北|西北)/g,
@@ -61,6 +62,10 @@ function stripUnitSpecific(text: string) {
     /\b(フローリング|クロス|建具|サッシ|キッチン|浴室|トイレ|洗面|給湯器|食洗機|浄水器|浴室乾燥機)\b[^\n。]*?(新規|交換|取替)/g,
     /\b(価格|税込|消費税|管理費|修繕積立金|ローン|返済|頭金|ボーナス払い|内覧|オープンルーム|申込|引渡|引き渡し)\b[^\n。]*?[。]/g,
     /\b\d{1,3}(\.\d+)?\s*(m2|㎡)\b/g,
+    /(令和|平成)\s*\d+年\s*\d+月[^\n。]*(リフォーム|リノベ|改装|改修|内装|交換|新規)/g,
+    /(バルコニー|テラス)[^\n。]{0,12}(南|東|西|北|南東|南西|北東|北西)向き/g,
+    /駐車場[^\n。]*?(空き|空有|空無|募集中|残り\d+台|(?:[0-9０-９]+)台)/g,
+    /(ぜひ.*ください|お問い合わせ|内覧|見学|オープンルーム|ご案内)/g,
   ];
   let out = text;
   for (const re of patterns) out = out.replace(re, "");

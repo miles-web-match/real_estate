@@ -8,7 +8,7 @@ export const onRequestOptions: PagesFunction = async () =>
     },
   });
 
-/* ---------- Helpers（describe.ts と同一） ---------- */
+/* ---------- Helpers（describe と同一） ---------- */
 const countJa = (s: string) => Array.from(s || "").length;
 function hardCapJa(s: string, max: number) {
   const arr = Array.from(s || ""); if (arr.length <= max) return s;
@@ -50,6 +50,10 @@ function stripUnitSpecific(text: string) {
   out = dropSentence(out, new RegExp(`${interiorWords}[^${SENTENCE_END}]*${renoWords}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
   out = dropSentence(out, new RegExp(`(リフォーム|リノベ|改装|改修)[^${SENTENCE_END}]*?(完了|済み|予定)[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
   out = dropSentence(out, new RegExp(`(令和|平成)\\s*\\d+年\\s*\\d+月[^${SENTENCE_END}]*(リフォーム|リノベ|改装|改修|内装|交換|新規)[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
+  out = out.replace(
+    new RegExp(`[^${SENTENCE_END}\\n]*?(リフォーム|リノベ|改装|改修)[^${SENTENCE_END}\\n]*?(?=${SENTENCE_END}|\\n|$)`, "g"),
+    ""
+  );
   out = out.replace(/(リフォーム済み?|フルリノベ(ーション)?)/g, "");
 
   const priceWords="(価格|税込|消費税|管理費|修繕積立金|ローン|返済|頭金|ボーナス払い|家賃|賃料|月額)";
@@ -75,7 +79,8 @@ function softenPhrases(text: string) {
     .replace(/閑静/g, "落ち着きのある環境を目指す計画")
     .replace(/抜群の利便性/g, "利便性に配慮")
     .replace(/(明るい住戸|明るい住空間|光を取り入れ|採光に優れ)/g, "採光に配慮")
-    .replace(/(心地よい風|風通しが良い)/g, "通風に配慮");
+    .replace(/(心地よい風|風通しが良い)/g, "通風に配慮")
+    .replace(/治安(が)?良(い|好)/g, "地域の生活環境に配慮");
 }
 
 function stripFloorPlan(text: string) {

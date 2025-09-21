@@ -39,7 +39,7 @@ const normMustWords = (src: unknown): string[] => {
 
 const stripPriceAndSpaces = (s: string) =>
   s.replace(/(価格|金額|[一二三四五六七八九十百千万億兆\d０-９,，\.]+(?:億|万)?円)/g, "")
-   .replace(/\s{2,}/g, " ").trim();
+    .replace(/\s{2,}/g, " ").trim();
 
 const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const stripWords = (s: string, words: string[]) =>
@@ -57,29 +57,32 @@ const dropSentence = (src: string, re: RegExp) => src.replace(re, "");
 
 /* ---------- CTA 強制除去（文ごと＋断片） ---------- */
 function stripCTA(text: string) {
-  const CTA_CORE = "(お問い合わせ|お問合せ|お問合わせ|問合せ|問い合わせ|ご連絡|ご相談|ご検討ください|ご検討を|資料請求|お申込|お申し込み|お申込み|お申し出|内覧|ご内覧|見学|ご見学|ご案内|予約|ご予約)";
+  // ✅ 新しい表現を追加
+  const CTA_CORE = "(お問い合わせ|お問合せ|お問合わせ|問合せ|問い合わせ|ご連絡|ご相談|ご検討ください|ご検討を|資料請求|お申込|お申し込み|お申込み|お申し出|内覧|ご内覧|見学|ご見学|ご案内|予約|ご予約|お待ちしております|お気軽にお電話ください|こちらから|詳細はお電話で)";
   const VIEW = "(ご覧ください|ご覧になってみてください|ご覧になれます|現地をご覧|現地(見学|内覧))";
   let out = text;
   out = dropSentence(out, new RegExp(`(?:${CTA_CORE}|${VIEW})[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
-  out = out.replace(new RegExp(`[^${SENTENCE_END}\\n]*?(?:${CTA_CORE}|${VIEW}|ぜひ[^${SENTENCE_END}\\n]*?(ご覧|検討))[^${SENTENCE_END}\\n]*?(?=${SENTENCE_END}|\\n|$)`, "g"), "");
+  out = out.replace(new RegExp(`[^${SENTENCE_END}\\n]*?(?:${CTA_CORE}|${VIEW}|ぜひ[^${SENTENCE_END}\\n]*?(ご覧|検討|お電話))[^${SENTENCE_END}\\n]*?(?=${SENTENCE_END}|\\n|$)`, "g"), "");
   out = out.replace(/お気軽に(ご連絡|お問い合わせ)?ください/g, "");
   return out;
 }
 
 /* ---------- リフォーム/専有系 強制除去（文ごと＋断片） ---------- */
 function stripRenoEverywhere(text: string) {
-  const reno = "(リフォーム|リノベ|改装|改修|内装|新規|交換|更新|取替|張り替え|張替え|貼り替え|貼替え|設置|クリーニング|補修)";
+  // ✅ 新しい表現を追加
+  const reno = "(リフォーム|リノベ|改装|改修|内装|新規|交換|更新|取替|張り替え|張替え|貼り替え|貼替え|設置|クリーニング|補修|リノベーション|一新|刷新|リニューアル|改築|模様替え)";
   const interior = "(室内|居室|専有部|キッチン|浴室|トイレ|洗面|給湯器|建具|サッシ|フローリング|クロス|水回り|食洗機|浄水器|浴室乾燥機)";
   let out = text;
   // 文単位
   out = dropSentence(out, new RegExp(`${interior}[^${SENTENCE_END}]*${reno}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
   out = dropSentence(out, new RegExp(`(最近\\s*)?${reno}[^${SENTENCE_END}]*?(完了|済み|予定)?[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
-  out = dropSentence(out, new RegExp(`(令和|平成)\\s*\\d+年\\s*\\d+月[^${SENTENCE_END}]*${reno}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
+  out = dropSentence(out, new RegExp(`(令和|平成|昭和)\\s*\\d+年\\s*\\d+月[^${SENTENCE_END}]*${reno}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
   // 句点の無い末尾断片
-  out = out.replace(new RegExp(`[^${SENTENCE_END}\\n]*?(最近\\s*)?${reno}[^${SENTENCE_END}\\n]*?(?=${SENTENCE_END}|\\n|$)`, "g"), "");
+  out = out.replace(new RegExp(`[^${SENTENCE_END}\\n]*?(?:最近\\s*)?${reno}[^${SENTENCE_END}\\n]*?(?=${SENTENCE_END}|\\n|$)`, "g"), "");
   // 「内装が新しく」「水回りが新しく」等
-  out = dropSentence(out, new RegExp(`${interior}[^${SENTENCE_END}]*?(新し|一新|刷新)[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
-  out = out.replace(/(リフォーム済み?|フルリノベ(ーション)?)/g, "");
+  out = dropSentence(out, new RegExp(`${interior}[^${SENTENCE_END}]*?(新し|一新|刷新|生まれ変わり)[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
+  // ✅ 表現を追加
+  out = out.replace(/(リフォーム済み?|フルリノベ(ーション)?|室内?クリーニング済|全面改修|内装一新|〇〇済)/g, "");
   return out;
 }
 
@@ -105,10 +108,10 @@ function stripUnitSpecific(text: string) {
 
   // 面積（㎡/平米）と、その文（数字だけでなく 〇/○ も検出）
   const areaWords = "(専有面積|内法面積|バルコニー面積|テラス面積|ルーフバルコニー面積|広さ|面積|延べ)";
-  const areaUnit  = "(㎡|m2|m²|平米)";
+  const areaUnit = "(㎡|m2|m²|平米)";
   out = dropSentence(out, new RegExp(`${areaWords}[^${SENTENCE_END}]*?${areaUnit}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
-  out = out.replace(new RegExp(`[約\\s]*(?:[〇○]+)\\s*${areaUnit}`, "g"), "");
-  out = out.replace(new RegExp(`\\b\\d{1,3}(?:[\\.,]\\d+)?\\s*${areaUnit}`, "g"), "");
+  out = out.replace(new RegExp(`[約\\s]*(?:[〇○]+)\\s*${areaUnit}`,"g"),"");
+  out = out.replace(new RegExp(`\\b\\d{1,3}(?:[\\.,]\\d+)?\\s*${areaUnit}`,"g"),"");
 
   // バルコニー/テラス を含む文は落とす（向きの有無問わず）
   out = dropSentence(out, new RegExp(`(バルコニー|テラス)[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
@@ -172,19 +175,13 @@ function enforceKiyaku(text: string) {
 /* ---------- スタイルガイド ---------- */
 function styleGuide(tone: string) {
   if (tone === "親しみやすい") return [
-    "文体: やわらかい丁寧語。親近感を大切にし、専門用語は避ける。",
-    "文長: 30〜60字中心。文末は「です」「ます」。",
-    "禁止: 幼稚な接続（〜で、〜だから〜です）。",
+    "文体: やわらかい丁寧語。親近感を大切にし、専門用語は避ける。", "文長: 30〜60字中心。文末は「です」「ます」。", "禁止: 幼稚な接続（〜で、〜だから〜です）。",
   ].join("\n");
   if (tone === "一般的") return [
-    "文体: 中立・説明的。事実ベースで読みやすさ重視。",
-    "文長: 40〜70字中心。文末は「です」「ます」。",
-    "禁止: 幼稚な接続。曖昧な断定。",
+    "文体: 中立・説明的。事実ベースで読みやすさ重視。", "文長: 40〜70字中心。文末は「です」「ます」。", "禁止: 幼稚な接続。曖昧な断定。",
   ].join("\n");
   return [
-    "文体: 上品・端正・落ち着いた調子。高級感ある広告コピー。",
-    "文長: 40〜70字中心。体言止め1〜2文は許容。",
-    "禁止: 幼稚な接続。誇張的最上級。",
+    "文体: 上品・端正・落ち着いた調子。高級感ある広告コピー。", "文長: 40〜70字中心。体言止め1〜2文は許容。", "禁止: 幼稚な接続。誇張的最上級。",
   ].join("\n");
 }
 
@@ -200,7 +197,7 @@ async function openaiChat(apiKey: string, payload: any) {
 }
 
 /* ---------- 長さ調整 & 校正 ---------- */
-async function ensureLengthDescribe(apiKey: string, opts: { draft: string; context: string; min: number; max: number; tone: string; style: string; }) {
+async function ensureLength(apiKey: string, opts: { draft: string; min: number; max: number; tone: string; style: string; }) {
   let out = opts.draft || "";
   for (let i = 0; i < 3; i++) {
     const len = countJa(out);
@@ -211,8 +208,8 @@ async function ensureLengthDescribe(apiKey: string, opts: { draft: string; conte
       temperature: 0.1,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: 'Return ONLY {"text": string}. (json)\n' + `日本語・トーン:${opts.tone}\n${opts.style}\n` + `目的: ${opts.min}〜${opts.max}文字に${need === "expand" ? "増やす" : "収める"}。幼稚な接続禁止。価格/金額/URL/電話不可。` },
-        { role: "user", content: JSON.stringify({ current_text: out, extracted_text: opts.context, action: need }) },
+        { role: "system", content: 'Return ONLY {"text": string}. (json)\n' + `日本語・トーン:${opts.tone}\n${opts.style}\n` + `目的:${opts.min}〜${opts.max}文字に${need === "expand" ? "増やす" : "収める"}。幼稚な接続禁止。価格/URL/電話不可。` },
+        { role: "user", content: JSON.stringify({ current_text: out, action: need }) },
       ],
     });
     try { out = String(JSON.parse(r.choices?.[0]?.message?.content || "{}")?.text || out); } catch {}
@@ -223,13 +220,13 @@ async function ensureLengthDescribe(apiKey: string, opts: { draft: string; conte
   return out;
 }
 
-async function polishJapanese(apiKey: string, text: string, tone: string, style: string) {
+async function polish(apiKey: string, text: string, tone: string, style: string) {
   const r = await openaiChat(apiKey, {
     model: "gpt-4o-mini",
     temperature: 0,
     response_format: { type: "json_object" },
     messages: [
-      { role: "system", content: 'Return ONLY {"text": string}. (json)\n' + `以下を校正。幼稚な接続禁止。体言止め/「〜を実現」「〜を提供します」も許容。トーン:${tone}\n${style}` },
+      { role: "system", content: 'Return ONLY {"text": string}. (json)\n' + `以下を校正。幼稚な接続禁止。体言止め/「〜を実現」「〜を提供します」許容。トーン:${tone}\n${style}` },
       { role: "user", content: JSON.stringify({ current_text: text }) },
     ],
   });
@@ -243,45 +240,50 @@ export const onRequestPost: PagesFunction = async (ctx) => {
     if (!OPENAI_API_KEY) return new Response(JSON.stringify({ error: "APIキー未設定" }), { status: 500 });
 
     const body = await ctx.request.json();
-    const { name, url, mustWords = [], tone = "上品・落ち着いた", minChars = 450, maxChars = 550 } = body || {};
-    if (!name || !url) return new Response(JSON.stringify({ error: "name/url必須" }), { status: 400 });
-
-    const resp = await fetch(url, { headers: { "user-agent": "Mozilla/5.0" } });
-    if (!resp.ok) return new Response(JSON.stringify({ error: "URL取得失敗" }), { status: 400 });
-    const extracted_text = htmlToText(await resp.text()).slice(0, 40000);
-
+    const { text = "", tone = "上品・落ち着いた", minChars = 450, maxChars = 550 } = body || {};
     const STYLE = styleGuide(tone);
 
-    const system =
+    // ✅ プロンプトを厳格化
+    const systemPrompt =
       'Return ONLY {"text": string}. (json)\n' +
-      [
-        "あなたは日本語の不動産コピーライターです。",
-        "出力はマンション“1棟”の紹介文に限定。室内/専有/リフォーム/間取り/価格/募集情報は書かない。",
-        `トーン:${tone}。次のスタイルガイド遵守:\n${STYLE}`,
-        `文字数:${minChars}〜${maxChars}（厳守）`,
-      ].join("\n");
+      "あなたは日本語の不動産コピーライターです。ユーザーから提供された文章を、不動産広告の規約に準拠した内容に校正・要約する専門家として振る舞ってください。特に、以下の禁止事項は**いかなる場合も**含めないでください。これは不動産広告の表示規約を遵守するためであり、非常に重要です。\n" +
+      "・リフォームや内装に関する情報（例：リフォーム済み、改装済み、内装を一新）\n" +
+      "・住戸ごとの詳細情報（例：間取り、部屋の広さ、号室、階数）\n" +
+      "・価格や金銭に関する情報（例：〇〇万円、家賃、ローン）\n" +
+      "・見学や問い合わせなどの行動喚起（CTA）（例：お問い合わせください、お待ちしております）\n" +
+      "・「最高」「絶対」などの誇張表現や最上級表現。\n" +
+      `トーン: ${tone}。次のスタイルガイドを遵守してください:\n${STYLE}\n` +
+      `文字数: ${minChars}〜${maxChars}（厳守）`;
 
-    const payload = { name, url, tone, extracted_text, must_words: normMustWords(mustWords), char_range: { min: minChars, max: maxChars } };
+    let cleaned = stripPriceAndSpaces(String(text));
+    cleaned = enforceKiyaku(cleaned);
 
-    const r1 = await openaiChat(OPENAI_API_KEY, {
-      model: "gpt-4o-mini", temperature: 0.1, response_format: { type: "json_object" },
-      messages: [{ role: "system", content: system }, { role: "user", content: JSON.stringify(payload) }],
+    cleaned = await ensureLength(OPENAI_API_KEY, { draft: cleaned, min: minChars, max: maxChars, tone, style: STYLE });
+
+    // ✅ 最終的なAI校正
+    const r = await openaiChat(OPENAI_API_KEY, {
+        model: "gpt-4o-mini",
+        temperature: 0,
+        response_format: { type: "json_object" },
+        messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: JSON.stringify({ current_text: cleaned, action: "final_polish" }) },
+        ],
     });
+    try { cleaned = String(JSON.parse(r.choices?.[0]?.message?.content || "{}")?.text || cleaned); } catch {}
 
-    let text = ""; try { text = String(JSON.parse(r1.choices?.[0]?.message?.content || "{}")?.text || ""); } catch {}
+    // 最終チェック
+    if (countJa(cleaned) > maxChars) cleaned = hardCapJa(cleaned, maxChars);
+    cleaned = stripPriceAndSpaces(cleaned);
+    cleaned = enforceKiyaku(cleaned);
 
-    text = stripPriceAndSpaces(text);
-    text = enforceKiyaku(text);
-
-    text = await ensureLengthDescribe(OPENAI_API_KEY, { draft: text, context: extracted_text, min: minChars, max: maxChars, tone, style: STYLE });
-    text = await polishJapanese(OPENAI_API_KEY, text, tone, STYLE);
-
-    if (countJa(text) > maxChars) text = hardCapJa(text, maxChars);
-    text = stripPriceAndSpaces(text);
-    text = enforceKiyaku(text);
-
-    return new Response(JSON.stringify({ text }), { headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" } });
-  } catch (e:any) {
-    return new Response(JSON.stringify({ error: e?.message || "server error" }), { status: 500, headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" } });
+    return new Response(JSON.stringify({ text: cleaned }), {
+      headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" }
+    });
+  } catch (e: any) {
+    return new Response(JSON.stringify({ error: e?.message || "server error" }), {
+      status: 500,
+      headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" }
+    });
   }
 };

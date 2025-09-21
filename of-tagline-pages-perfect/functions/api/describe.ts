@@ -1,8 +1,8 @@
 // ==== Cloudflare Pages Functions: POST /api/describe ====
 // 必要環境変数: OPENAI_API_KEY
 
-export const onRequestOptions: PagesFunction = async () => {
-  return new Response(null, {
+export const onRequestOptions: PagesFunction = async () =>
+  new Response(null, {
     status: 204,
     headers: {
       "Access-Control-Allow-Origin": "*",
@@ -10,7 +10,6 @@ export const onRequestOptions: PagesFunction = async () => {
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
     },
   });
-};
 
 /* ---------- Utils ---------- */
 function htmlToText(html: string) {
@@ -52,7 +51,7 @@ const BANNED_HARD = [
   "地域でナンバーワン","抜群","特選","厳選","正統","至近","至便","特安","激安","掘出","破格","投売り","バーゲンセール",
 ];
 
-// “言い切り”を避ける緩和マップ（断定→配慮/傾向）
+/** “言い切り”を避ける緩和マップ（断定→配慮/傾向） */
 const SOFT_MAP: Array<[RegExp, string]> = [
   // 環境・快適性
   [/日当たり(良好|抜群)/g, "日当たりに配慮"],
@@ -71,30 +70,58 @@ const SOFT_MAP: Array<[RegExp, string]> = [
   [/(必ず|間違いなく|保証|万全)/g, "配慮されています"],
 ];
 
-/** 徒歩X分 → 徒歩X~(X+2)分（すでに幅表記があるものはそのまま） */
+/** 徒歩X分 → 徒歩X~(X+2)分（既に幅表記があるものはスキップ） */
 function widenWalkingMinutes(text: string) {
   return text.replace(/徒歩(\d{1,2})分(?![~〜]\d)/g, (_m, p1) => {
     const base = Number(p1);
     if (!Number.isFinite(base)) return _m;
-    const hi = base + 2;
-    return `徒歩${base}~${hi}分`;
+    return `徒歩${base}~${base + 2}分`;
   });
 }
 
-/** “間取りを言わない”ためのマスク（各トーンで適用） */
+/** 間取りは言わない（略号/表記の網羅的除去） */
 function stripFloorPlan(text: string) {
-  // 代表的な間取り・間型・略号を包括的に除去
   const fp = [
     "ワンルーム","ワン ルーム","スタジオタイプ","スタジオ タイプ","メゾネット","ロフト",
     "間取り","間取","間口",
     "LDK","SLDK","SDK","LK","DK","K",
     "1LDK","2LDK","3LDK","4LDK","5LDK","1DK","2DK","3DK","4DK","1K","2K","3K","4K",
     "１ＬＤＫ","２ＬＤＫ","３ＬＤＫ","４ＬＤＫ","１ＤＫ","２ＤＫ","３ＤＫ","４ＤＫ","１Ｋ","２Ｋ","３Ｋ","４Ｋ",
-    // 数字 + LDK/DK/K（半角/全角）
     "\\d\\s*(LDK|DK|K)","[０-９]\\s*(ＬＤＫ|ＤＫ|Ｋ)"
   ];
-  const re = new RegExp(fp.join("|"), "gi");
-  return text.replace(re, "");
+  return text.replace(new RegExp(fp.join("|"), "gi"), "");
+}
+
+/** ★ 1室向け情報を落とす（マンション“1棟”紹介限定） */
+function stripUnitSpecific(text: string) {
+  const patterns = [
+    // 号室・所在階・方角
+    /\b\d{1,4}\s*号室\b/g,
+    /(所在|当該)?\s*([地上\d]+)階部分/g,
+    /(方位|方角|向き)\s*[:：]?\s*(南|東|西|北|南東|南西|北東|北西|東南|西南|東北|西北)/g,
+
+    // 間取り・専有系
+    /\b(間取り|間取|専有面積|内法面積|バルコニー面積|ルーフバルコニー面積|テラス面積)\b[^\n。]*?/g,
+    /\b(\d+\s*(?:LDK|DK|K))\b/g,
+    /[０-９]+\s*(ＬＤＫ|ＤＫ|Ｋ)/g,
+    /\b(1LDK|2LDK|3LDK|4LDK|5LDK|1DK|2DK|3DK|4DK|1K|2K|3K|4K)\b/gi,
+    /\b(ワンルーム|スタジオタイプ|メゾネット|ロフト)\b/g,
+
+    // 室内仕様・個別改装
+    /\b(室内|居室|専有部)[:：]?[^\n。]*?(新規|交換|設置|張替|貼替|取替|取換|清掃|補修|クリーニング)[^\n。]*?[。]/g,
+    /\b(リフォーム|リノベーション|改装|改修|内装)\b[^\n。]*?[。]/g,
+    /\b(フローリング|クロス|建具|サッシ|キッチン|浴室|トイレ|洗面|給湯器|食洗機|浄水器|浴室乾燥機)\b[^\n。]*?(新規|交換|取替)/g,
+
+    // 価格・費用・販売行為
+    /\b(価格|税込|消費税|管理費|修繕積立金|ローン|返済|頭金|ボーナス払い|内覧|オープンルーム|申込|引渡|引き渡し)\b[^\n。]*?[。]/g,
+
+    // 専有サイズの m2/㎡ の裸数値
+    /\b\d{1,3}(\.\d+)?\s*(m2|㎡)\b/g,
+  ];
+  let out = text;
+  for (const re of patterns) out = out.replace(re, "");
+  out = out.replace(/【?室内[^\n】]*】?/g, ""); // 囲み残骸の掃除
+  return out.replace(/\s{2,}/g, " ").replace(/。\s*。/g, "。").trim();
 }
 
 /** フレーズ緩和 */
@@ -104,23 +131,26 @@ function softenPhrases(text: string) {
   return out;
 }
 
-/** 規約準拠クリーニング（柔らかい言い換え重視 + 間取り禁止 + 徒歩幅） */
+/** 規約準拠クリーニング（1室情報→除去 / 間取り禁止 / 徒歩幅 / 緩和） */
 function enforceKiyaku(text: string) {
   let out = text;
+
+  // ★ 最初に「1室専用」情報を落とす（棟スコープへ統一）
+  out = stripUnitSpecific(out);
 
   // 強い禁止語は削除
   out = stripWords(out, BANNED_HARD);
 
-  // “新築”断定は避ける（建築年等の事実が無い限り）
+  // “新築”断定は避ける（根拠不明の場合は削除）
   out = out.replace(/新築/g, "");
 
-  // 間取りは言わない
+  // 念のため：間取り語を削除
   out = stripFloorPlan(out);
 
-  // 徒歩表現は「幅を持たせる」
+  // 徒歩表現は幅を持たせる
   out = widenWalkingMinutes(out);
 
-  // フレーズ緩和
+  // 言い切りの緩和
   out = softenPhrases(out);
 
   // 仕上げ
@@ -132,14 +162,14 @@ function styleGuide(tone: string): string {
   if (tone === "親しみやすい") {
     return [
       "文体: やわらかい丁寧語。親近感を大切にし、専門用語は避ける。",
-      "文長: 30〜60字中心。文末は「です」「ます」を基本。",
+      "文長: 30〜60字中心。文末は基本「です」「ます」。",
       "禁止: 子どもっぽい接続（〜で、〜だから〜です）。過度な誇張。",
     ].join("\n");
   }
   if (tone === "一般的") {
     return [
       "文体: 中立・説明的。事実ベースで過不足なく、読みやすさ重視。",
-      "文長: 40〜70字中心。文末は「です」「ます」を基本。",
+      "文長: 40〜70字中心。文末は基本「です」「ます」。",
       "禁止: 子どもっぽい接続（〜で、〜だから〜です）。曖昧な断定。",
     ].join("\n");
   }
@@ -183,7 +213,7 @@ async function ensureLengthDescribe(
             'Return ONLY {"text": string}. (json)\n' +
             `日本語・トーン:${opts.tone}。次のスタイルガイドを遵守：\n${opts.style}\n` +
             `目的: 文字数を${opts.min}〜${opts.max}（全角）に${need === "expand" ? "増やし" : "収め"}る。\n` +
-            "事実不足は一般的な叙述で補完。価格/金額/円/万円・電話番号・URLは禁止。",
+            "事実不足は一般的な叙述で補完。価格/金額/円/万円・電話番号・URLは禁止。幼稚な接続は禁止。",
         },
         { role: "user", content: JSON.stringify({ current_text: out, extracted_text: opts.context, action: need }) },
       ],
@@ -283,7 +313,7 @@ async function applyRevisionNotes(apiKey: string, text: string, notes: string[] 
         role: "system",
         content:
           'Return ONLY {"text": string}. (json)\n' +
-          "与えられた本文に修正要望を反映。誇張や最上級は避け、規約に配慮。間取りは言わない。幼稚な接続は避ける。",
+          "与えられた本文に修正要望を反映。誇張や最上級は避け、規約に配慮。室内/専有/個別改装・間取り・価格は書かない。幼稚な接続は避ける。",
       },
       {
         role: "user",
@@ -293,6 +323,7 @@ async function applyRevisionNotes(apiKey: string, text: string, notes: string[] 
           tone,
           style,
           constraints: {
+            scope: "building_only",
             no_floor_plan: true,
             avoid_exaggeration: true,
           },
@@ -323,13 +354,13 @@ export const onRequestPost: PagesFunction = async (ctx) => {
       minChars = 450,
       maxChars = 550,
       referenceExamples = [] as string[],
-      revisionNotes = [] as string[] | string, // ★ 追加：修正要望
+      revisionNotes = [] as string[] | string,
     } = body || {};
 
     if (!name || !url)
       return new Response(JSON.stringify({ error: "name / url は必須です" }), { status: 400 });
 
-    // 対象ページから本文抽出
+    // 対象ページから本文抽出（部屋ページでもOK）
     const resp = await fetch(url, { headers: { "user-agent": "Mozilla/5.0" } });
     if (!resp.ok)
       return new Response(JSON.stringify({ error: `URL取得失敗 (${resp.status})` }), { status: 400 });
@@ -363,6 +394,7 @@ export const onRequestPost: PagesFunction = async (ctx) => {
       'Return ONLY {"text": string}. (json)\n' +
       [
         "あなたは日本語の不動産コピーライターです。",
+        "出力はマンション“1棟”の紹介文に限定。入力URLが部屋販売ページでも、室内・専有・個別改装・間取り・価格には触れない。",
         `トーン: ${tone}。次のスタイルガイドに従う。`,
         STYLE_GUIDE,
         STYLE_ANCHORS ? `\n---\n【Style Anchors】\n${STYLE_ANCHORS}\n---` : "",

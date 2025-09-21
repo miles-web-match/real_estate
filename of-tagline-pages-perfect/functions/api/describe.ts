@@ -84,7 +84,12 @@ function stripUnitSpecific(text: string) {
   out = dropSentence(out, new RegExp(`${interiorWords}[^${SENTENCE_END}]*${renoWords}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
   out = dropSentence(out, new RegExp(`(リフォーム|リノベ|改装|改修)[^${SENTENCE_END}]*?(完了|済み|予定)[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
   out = dropSentence(out, new RegExp(`(令和|平成)\\s*\\d+年\\s*\\d+月[^${SENTENCE_END}]*(リフォーム|リノベ|改装|改修|内装|交換|新規)[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
-  // 単独語の掃除（句点が無い断片にも対応）
+  // 末尾が句点で終わらない断片にも対応（行末まで除去）
+  out = out.replace(
+    new RegExp(`[^${SENTENCE_END}\\n]*?(リフォーム|リノベ|改装|改修)[^${SENTENCE_END}\\n]*?(?=${SENTENCE_END}|\\n|$)`, "g"),
+    ""
+  );
+  // 単独語の掃除（断片向け）
   out = out.replace(/(リフォーム済み?|フルリノベ(ーション)?)/g, "");
 
   // 価格・費用・募集/CTA
@@ -113,7 +118,8 @@ function softenPhrases(text: string) {
     .replace(/閑静/g, "落ち着きのある環境を目指す計画")
     .replace(/抜群の利便性/g, "利便性に配慮")
     .replace(/(明るい住戸|明るい住空間|光を取り入れ|採光に優れ)/g, "採光に配慮")
-    .replace(/(心地よい風|風通しが良い)/g, "通風に配慮");
+    .replace(/(心地よい風|風通しが良い)/g, "通風に配慮")
+    .replace(/治安(が)?良(い|好)/g, "地域の生活環境に配慮");
 }
 
 function stripFloorPlan(text: string) {

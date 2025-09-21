@@ -51,7 +51,7 @@ const BANNED_HARD = [
   "地域でナンバーワン","抜群","特選","厳選","正統","至近","至便","特安","激安","掘出","破格","投売り","バーゲンセール",
 ];
 
-/* ---------- 棟専用フィルタ ---------- */
+/* ---------- 棟専用フィルタ（強化版） ---------- */
 function stripUnitSpecific(text: string) {
   const SENTENCE_END = "[。\\.！？!？]";
   const dropSentence = (src: string, re: RegExp) => src.replace(re, "");
@@ -70,28 +70,30 @@ function stripUnitSpecific(text: string) {
   out = out.replace(/\b(1LDK|2LDK|3LDK|4LDK|5LDK|1DK|2DK|3DK|4DK|1K|2K|3K|4K)\b/gi, "");
   out = out.replace(/\b(ワンルーム|スタジオタイプ|メゾネット|ロフト)\b/g, "");
 
-  // 面積（㎡/平米）
+  // 面積（㎡/平米）と、その文
   const areaWords = "(専有面積|内法面積|バルコニー面積|テラス面積|ルーフバルコニー面積|テラス|バルコニー)";
   const areaUnit  = "(㎡|m2|m²|平米)";
   out = dropSentence(out, new RegExp(`${areaWords}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
   out = out.replace(new RegExp(`\\b\\d{1,3}(?:[\\.,]\\d+)?\\s*${areaUnit}`, "g"), "");
 
-  // 室内リフォーム
-  const interiorWords = "(室内|居室|専有部|キッチン|浴室|トイレ|洗面|給湯器|建具|サッシ|フローリング|クロス|食洗機|浄水器|浴室乾燥機)";
-  const renoWords = "(リフォーム|リノベ|改装|改修|内装|新規|交換|取替|張替|貼替|設置|クリーニング|補修)";
-  out = dropSentence(out, new RegExp(`${interiorWords}[^${SENTENCE_END}]*${renoWords}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
+  // ★ リフォーム・内装（単独/済み/完了/予定を含む文を丸ごと除去）
   out = dropSentence(out, new RegExp(`[^${SENTENCE_END}]*(内装|リフォーム|リノベ|改装|改修)[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
-  out = dropSentence(out, new RegExp(`(リフォーム|リノベ|改装|改修)[^${SENTENCE_END}]*?(完了|済み)[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
-  out = dropSentence(out, new RegExp(`内装[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
+  // 具体ワード（かな・漢字揺れ含む）
+  const renoWords = "(リフォーム|リノベ|改装|改修|内装|新規|交換|取替|張り替え|張替え|貼り替え|貼替え|設置|クリーニング|補修)";
+  const interiorWords = "(室内|居室|専有部|キッチン|浴室|トイレ|洗面|給湯器|建具|サッシ|フローリング|クロス|食洗機|浄水器|浴室乾燥機)";
+  out = dropSentence(out, new RegExp(`${interiorWords}[^${SENTENCE_END}]*${renoWords}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
+  out = dropSentence(out, new RegExp(`(リフォーム|リノベ|改装|改修)[^${SENTENCE_END}]*?(完了|済み|予定)[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
   out = dropSentence(out, new RegExp(`(令和|平成)\\s*\\d+年\\s*\\d+月[^${SENTENCE_END}]*(リフォーム|リノベ|改装|改修|内装|交換|新規)[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
+  // 単独語の掃除（句点が無い断片にも対応）
+  out = out.replace(/(リフォーム済み?|フルリノベ(ーション)?)/g, "");
 
-  // 価格・費用・募集
+  // 価格・費用・募集/CTA
   const priceWords = "(価格|税込|消費税|管理費|修繕積立金|ローン|返済|頭金|ボーナス払い|家賃|賃料|月額)";
   out = dropSentence(out, new RegExp(`${priceWords}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
-  const ctaWords = "(お問い合わせ|内覧|見学|オープンルーム|ご案内|お気軽に(ご連絡|お問い合わせ)?ください|予約)";
+  const ctaWords = "(お問い合わせ|内覧|見学|オープンルーム|ご案内|お気軽に(ご連絡|お問い合わせ)?ください|予約|ぜひ[^。!?]*?(ご覧|検討))";
   out = dropSentence(out, new RegExp(`${ctaWords}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
 
-  // 駐車場 在庫/空き
+  // 駐車場 在庫/空き・月額
   out = dropSentence(out, /駐車場[^。！？!?]*?(空き|空有|空無|募集中|残り\d+台|[0-9０-９]+台|月額)[^。！？!?]*[。！？!?]/g);
 
   // バルコニー向き（保険）
@@ -101,7 +103,7 @@ function stripUnitSpecific(text: string) {
   return out;
 }
 
-/* ---------- 緩和表現 ---------- */
+/* ---------- 緩和表現（断定→配慮） ---------- */
 function softenPhrases(text: string) {
   return text
     .replace(/日当たり(良好|抜群)/g, "日当たりに配慮")
@@ -109,7 +111,9 @@ function softenPhrases(text: string) {
     .replace(/眺望(良好|抜群)/g, "眺望に配慮")
     .replace(/静寂/g, "静けさに配慮")
     .replace(/閑静/g, "落ち着きのある環境を目指す計画")
-    .replace(/抜群の利便性/g, "利便性に配慮");
+    .replace(/抜群の利便性/g, "利便性に配慮")
+    .replace(/(明るい住戸|明るい住空間|光を取り入れ|採光に優れ)/g, "採光に配慮")
+    .replace(/(心地よい風|風通しが良い)/g, "通風に配慮");
 }
 
 function stripFloorPlan(text: string) {
@@ -125,6 +129,7 @@ function widenWalkingMinutes(text: string) {
   });
 }
 
+/* ---------- 規約準拠フィニッシュ ---------- */
 function enforceKiyaku(text: string) {
   let out = stripUnitSpecific(text);
   out = stripWords(out, BANNED_HARD);
@@ -135,7 +140,7 @@ function enforceKiyaku(text: string) {
   return out.replace(/。\s*。/g, "。").replace(/\s{2,}/g, " ").trim();
 }
 
-/* ---------- Style ---------- */
+/* ---------- スタイルガイド ---------- */
 function styleGuide(tone: string) {
   if (tone === "親しみやすい") return [
     "文体: やわらかい丁寧語。親近感を大切にし、専門用語は避ける。",
@@ -165,7 +170,7 @@ async function openaiChat(apiKey: string, payload: any) {
   return r.json();
 }
 
-/* ---------- Length & Polish ---------- */
+/* ---------- 長さ調整 & 校正 ---------- */
 async function ensureLengthDescribe(apiKey: string, opts: { draft: string; context: string; min: number; max: number; tone: string; style: string; }) {
   let out = opts.draft || "";
   for (let i = 0; i < 3; i++) {

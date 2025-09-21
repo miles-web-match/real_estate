@@ -81,6 +81,7 @@ function stripUnitSpecific(text: string) {
   const renoWords = "(リフォーム|リノベ|改装|改修|内装|新規|交換|取替|張替|貼替|設置|クリーニング|補修)";
   out = dropSentence(out, new RegExp(`${interiorWords}[^${SENTENCE_END}]*${renoWords}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
   out = dropSentence(out, new RegExp(`(リフォーム|リノベ|改装|改修)[^${SENTENCE_END}]*?(完了|済み)[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
+  out = dropSentence(out, new RegExp(`内装[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
   out = dropSentence(out, new RegExp(`(令和|平成)\\s*\\d+年\\s*\\d+月[^${SENTENCE_END}]*(リフォーム|リノベ|改装|改修|内装|交換|新規)[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
 
   // 価格・費用・募集

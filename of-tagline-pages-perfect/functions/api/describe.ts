@@ -94,7 +94,7 @@ function stripFloorPlan(text: string) {
 
 /** ★ 1室向け情報を落とす（マンション“1棟”紹介限定） */
 function stripUnitSpecific(text: string) {
-  const patterns = [
+  const patterns: RegExp[] = [
     // 号室・所在階・方角
     /\b\d{1,4}\s*号室\b/g,
     /(所在|当該)?\s*([地上\d]+)階部分/g,
@@ -117,6 +117,18 @@ function stripUnitSpecific(text: string) {
 
     // 専有サイズの m2/㎡ の裸数値
     /\b\d{1,3}(\.\d+)?\s*(m2|㎡)\b/g,
+
+    // ★ 追加：令和/平成 × リフォーム等（時期付き専有改装）
+    /(令和|平成)\s*\d+年\s*\d+月[^\n。]*(リフォーム|リノベ|改装|改修|内装|交換|新規)/g,
+
+    // ★ 追加：バルコニーの向き（南向き 等）
+    /(バルコニー|テラス)[^\n。]{0,12}(南|東|西|北|南東|南西|北東|北西)向き/g,
+
+    // ★ 追加：駐車場の空き・在庫表現
+    /駐車場[^\n。]*?(空き|空有|空無|募集中|残り\d+台|(?:[0-9０-９]+)台)/g,
+
+    // ★ 追加：勧誘・募集系の文言
+    /(ぜひ.*ください|お問い合わせ|内覧|見学|オープンルーム|ご案内)/g,
   ];
   let out = text;
   for (const re of patterns) out = out.replace(re, "");

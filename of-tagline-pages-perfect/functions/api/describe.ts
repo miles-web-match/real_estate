@@ -55,20 +55,21 @@ const BANNED_HARD = [
 const SENTENCE_END = "[。\\.！？!？]";
 const dropSentence = (src: string, re: RegExp) => src.replace(re, "");
 
-/* ---------- CTA 強制除去（文ごと） ---------- */
+/* ---------- CTA 強制除去（文ごと＋断片） ---------- */
 function stripCTA(text: string) {
-  const cta = "(お問い合わせ|お問合せ|内覧|見学|ご案内|予約|お気軽に(ご連絡|お問い合わせ)?ください|ぜひ[^。!?]*?(ご覧|検討)|お待ちしております)";
-  // 文ごと落とす
-  let out = dropSentence(text, new RegExp(`${cta}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
-  // 句点の無い末尾断片も落とす
-  out = out.replace(new RegExp(`[^${SENTENCE_END}\\n]*?(?:${cta})[^${SENTENCE_END}\\n]*?(?=${SENTENCE_END}|\\n|$)`, "g"), "");
+  const CTA_CORE = "(お問い合わせ|お問合せ|お問合わせ|問合せ|問い合わせ|ご連絡|ご相談|ご検討ください|ご検討を|資料請求|お申込|お申し込み|お申込み|お申し出|内覧|ご内覧|見学|ご見学|ご案内|予約|ご予約)";
+  const VIEW = "(ご覧ください|ご覧になってみてください|ご覧になれます|現地をご覧|現地(見学|内覧))";
+  let out = text;
+  out = dropSentence(out, new RegExp(`(?:${CTA_CORE}|${VIEW})[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
+  out = out.replace(new RegExp(`[^${SENTENCE_END}\\n]*?(?:${CTA_CORE}|${VIEW}|ぜひ[^${SENTENCE_END}\\n]*?(ご覧|検討))[^${SENTENCE_END}\\n]*?(?=${SENTENCE_END}|\\n|$)`, "g"), "");
+  out = out.replace(/お気軽に(ご連絡|お問い合わせ)?ください/g, "");
   return out;
 }
 
 /* ---------- リフォーム/専有系 強制除去（文ごと＋断片） ---------- */
 function stripRenoEverywhere(text: string) {
-  const reno = "(リフォーム|リノベ|改装|改修|内装|新規|交換|取替|張り替え|張替え|貼り替え|貼替え|設置|クリーニング|補修)";
-  const interior = "(室内|居室|専有部|キッチン|浴室|トイレ|洗面|給湯器|建具|サッシ|フローリング|クロス|食洗機|浄水器|浴室乾燥機)";
+  const reno = "(リフォーム|リノベ|改装|改修|内装|新規|交換|更新|取替|張り替え|張替え|貼り替え|貼替え|設置|クリーニング|補修)";
+  const interior = "(室内|居室|専有部|キッチン|浴室|トイレ|洗面|給湯器|建具|サッシ|フローリング|クロス|水回り|食洗機|浄水器|浴室乾燥機)";
   let out = text;
   // 文単位
   out = dropSentence(out, new RegExp(`${interior}[^${SENTENCE_END}]*${reno}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
@@ -76,7 +77,8 @@ function stripRenoEverywhere(text: string) {
   out = dropSentence(out, new RegExp(`(令和|平成)\\s*\\d+年\\s*\\d+月[^${SENTENCE_END}]*${reno}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
   // 句点の無い末尾断片
   out = out.replace(new RegExp(`[^${SENTENCE_END}\\n]*?(最近\\s*)?${reno}[^${SENTENCE_END}\\n]*?(?=${SENTENCE_END}|\\n|$)`, "g"), "");
-  // 単独語の掃除
+  // 「内装が新しく」「水回りが新しく」等
+  out = dropSentence(out, new RegExp(`${interior}[^${SENTENCE_END}]*?(新し|一新|刷新)[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
   out = out.replace(/(リフォーム済み?|フルリノベ(ーション)?)/g, "");
   return out;
 }
@@ -91,6 +93,9 @@ function stripUnitSpecific(text: string) {
   out = out.replace(/(方位|方角|向き)\s*[:：]?\s*(南|東|西|北|南東|南西|北東|北西|東南|西南|東北|西北)/g, "");
   out = out.replace(/(南|東|西|北|南東|南西|北東|北西)\s*向(き)?/g, "");
 
+  // 「お部屋は〜」など“住戸”前提の文を落とす
+  out = dropSentence(out, new RegExp(`(お部屋|部屋|当住戸)[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
+
   // 間取り/専有サイズ
   out = out.replace(/\b(間取り|間取|間口)\b[^\n。]*?/g, "");
   out = out.replace(/\b(\d+\s*(LDK|DK|K))\b/gi, "");
@@ -98,11 +103,15 @@ function stripUnitSpecific(text: string) {
   out = out.replace(/\b(1LDK|2LDK|3LDK|4LDK|5LDK|1DK|2DK|3DK|4DK|1K|2K|3K|4K)\b/gi, "");
   out = out.replace(/\b(ワンルーム|スタジオタイプ|メゾネット|ロフト)\b/g, "");
 
-  // 面積（㎡/平米）と、その文
-  const areaWords = "(専有面積|内法面積|バルコニー面積|テラス面積|ルーフバルコニー面積|テラス|バルコニー)";
+  // 面積（㎡/平米）と、その文（数字だけでなく 〇/○ も検出）
+  const areaWords = "(専有面積|内法面積|バルコニー面積|テラス面積|ルーフバルコニー面積|広さ|面積|延べ)";
   const areaUnit  = "(㎡|m2|m²|平米)";
-  out = dropSentence(out, new RegExp(`${areaWords}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
+  out = dropSentence(out, new RegExp(`${areaWords}[^${SENTENCE_END}]*?${areaUnit}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
+  out = out.replace(new RegExp(`[約\\s]*(?:[〇○]+)\\s*${areaUnit}`, "g"), "");
   out = out.replace(new RegExp(`\\b\\d{1,3}(?:[\\.,]\\d+)?\\s*${areaUnit}`, "g"), "");
+
+  // バルコニー/テラス を含む文は落とす（向きの有無問わず）
+  out = dropSentence(out, new RegExp(`(バルコニー|テラス)[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
 
   // リフォーム関連 全面除去
   out = stripRenoEverywhere(out);
@@ -112,11 +121,8 @@ function stripUnitSpecific(text: string) {
   out = dropSentence(out, new RegExp(`${priceWords}[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
   out = stripCTA(out);
 
-  // 駐車場 在庫/空き・月額
+  // 駐車場 在庫/月額など
   out = dropSentence(out, /駐車場[^。！？!?]*?(空き|空有|空無|募集中|残り\d+台|[0-9０-９]+台|月額)[^。！？!?]*[。！？!?]/g);
-
-  // バルコニー向き（保険）
-  out = out.replace(/(バルコニー|テラス)[^\n。]{0,16}(南|東|西|北|南東|南西|北東|北西)\s*向(き)?/g, "");
 
   out = out.replace(/。\s*。/g, "。").replace(/\s{2,}/g, " ").trim();
   return out;
@@ -131,7 +137,7 @@ function softenPhrases(text: string) {
     .replace(/静寂/g, "静けさに配慮")
     .replace(/閑静/g, "落ち着きのある環境を目指す計画")
     .replace(/抜群の利便性/g, "利便性に配慮")
-    .replace(/(明るい住戸|明るい住空間|光を取り入れ|採光に優れ)/g, "採光に配慮")
+    .replace(/(明るい住戸|明るい住空間|明るいお部屋|光を取り入れ|採光に優れ)/g, "採光に配慮")
     .replace(/(心地よい風|風通しが良い)/g, "通風に配慮")
     .replace(/治安(が)?良(い|好)/g, "地域の生活環境に配慮");
 }
@@ -157,7 +163,7 @@ function enforceKiyaku(text: string) {
   out = stripFloorPlan(out);
   out = widenWalkingMinutes(out);
   out = softenPhrases(out);
-  // 念のため最終ゲートをもう一度
+  // 念のため最終ゲート再適用
   out = stripRenoEverywhere(out);
   out = stripCTA(out);
   return out.replace(/。\s*。/g, "。").replace(/\s{2,}/g, " ").trim();

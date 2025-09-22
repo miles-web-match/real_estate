@@ -24,13 +24,13 @@ const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const stripWords = (s: string, words: string[]) => s.replace(new RegExp(`(${words.map(esc).join("|")})`, "g"), "");
 const BANNED_HARD = ["完全","完ぺき","絶対","万全","100％","理想","日本一","日本初","業界一","No.1","一流","最高","最高級","最上級","極上","地域でナンバーワン","抜群","特選","厳選","正統","至近","至便","特安","激安","掘出","破格","投売り","バーゲンセール"];
 
+/* ---- Describe と同じフィルタ群 ---- */
 function stripCTA(text: string) {
-  const CTA_CORE="(お問い合わせ|お問合せ|お問合わせ|問合せ|問い合わせ|ご連絡|ご相談|ご検討ください|ご検討を|資料請求|お申込|お申し込み|お申込み|お申し出|内覧|ご内覧|見学|ご見学|ご案内|予約|ご予約)";
-  const VIEW="(ご覧ください|ご覧になってみてください|ご覧になれます|現地をご覧|現地(見学|内覧))";
+  const CTA_CORE="(お問い合わせ|お問合せ|お問合わせ|問合せ|問い合わせ|ご連絡|ご相談|資料請求|お申込|お申し込み|お申込み|お申し出|ご検討ください|ご検討を)";
+  const VIEW="(ご覧ください|ご覧になってみてください|ご覧になれます|現地をご覧|現地(見学|内覧)|ぜひ一度)";
   let out = text;
   out = dropSentence(out, new RegExp(`(?:${CTA_CORE}|${VIEW})[^${SENTENCE_END}]*${SENTENCE_END}`, "g"));
-  out = out.replace(new RegExp(`[^${SENTENCE_END}\\n]*?(?:${CTA_CORE}|${VIEW}|ぜひ[^${SENTENCE_END}\\n]*?(ご覧|検討))[^${SENTENCE_END}\\n]*?(?=${SENTENCE_END}|\\n|$)`, "g"), "");
-  out = out.replace(/お気軽に(ご連絡|お問い合わせ)?ください/g, "");
+  out = out.replace(new RegExp(`[^${SENTENCE_END}\\n]*?(?:${CTA_CORE}|${VIEW}|お気軽に[^${SENTENCE_END}\\n]*?ください)[^${SENTENCE_END}\\n]*?(?=${SENTENCE_END}|\\n|$)`, "g"), "");
   return out;
 }
 function stripRenoEverywhere(text: string) {
@@ -154,7 +154,7 @@ async function polish(apiKey:string, text:string, tone:string, style:string){
   try{ return JSON.parse(r.choices?.[0]?.message?.content||"{}")?.text || text; }catch{ return text; }
 }
 
-/* ---------- Handler ---------- */
+/* ---------- Handler（出力② 自動チェック・校正） ---------- */
 export const onRequestPost: PagesFunction = async (ctx) => {
   try {
     const OPENAI_API_KEY = (ctx.env as any)?.OPENAI_API_KEY as string;
